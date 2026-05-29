@@ -17,9 +17,8 @@ Context is provided two ways at once: the relevant evidence text extracted from 
 ```
 financebench-eval/
 ├── benchmark.py         — main script
-├── .env                 — API credentials (never committed to git)
-├── .env.example         — template showing required variables
-├── data/
+├── .env                 — API credentials
+|── data/
 │   └── financebench_open_source.jsonl  — 150 questions with answers and evidence
 ├── pdfs/                — source PDF documents (not committed to git)
 └── results/

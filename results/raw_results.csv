@@ -1,0 +1,39 @@
+financebench_id,company,doc_name,question,gold_answer,plain_answer,elen_answer
+financebench_id_03029,3M,3M_2018_10K,What is the FY2018 capital expenditure amount (in USD millions) for 3M? Give a response to the question by relying on the details shown in the cash flow statement.,$1577.00,"**Finding 3M's FY2018 Capital Expenditure**
+
+Okay, so the user needs the capital expenditure figure for 3M in fiscal year 2018. That's straightforward enough. Given my expertise, I know the easiest place to find this is in the consolidated statement of cash flows. Specifically, I'll be looking in the investing activities section. My experience tells me that capital expenditures are almost always represented as ""Purchases of property, plant and equipment (PP&E)"" within that section. Therefore, my immediate task is to locate ""Purchases of property, plant and equipment (PP&E)"" under ""Cash Flows from Investing Activities"" and then pinpoint the amount listed for the year 2018. Should be a quick search.
+The FY2018 capital expenditure amount for 3M is $1,577 million, as indicated by ""Purchases of property, plant and equipment (PP&E)"" in the Cash Flows from Investing Activities section of the consolidated statement of cash flows.","**Analyzing the Capital Expenditure for FY2018**
+
+Okay, so the user needs the capital expenditure figure for fiscal year 2018, according to this cash flow statement. My first thought is to zero in on the ""Investing Activities"" section because that's where I expect to find the information, typically under the line item ""Purchases of property, plant and equipment (PP&E).""
+
+Right, let me scan the table... Aha, there it is! ""Purchases of property, plant and equipment (PP&E)"" – and under the ""2018"" column, it shows (1,577). Now I need to remember these are in millions. And that negative sign... right, that negative sign indicates cash *used*, which is what we would expect for capital expenditure – an outflow of cash to acquire assets. So I need to take the absolute value of that number, because we typically report capital expenditure as a positive value representing the expense. Therefore, the answer is 1,577 million.
+The FY2018 capital expenditure amount for 3M is $1,577 million USD. This is derived from the ""Purchases of property, plant and equipment (PP&E)"" line item under the ""Cash Flows from Investing Activities"" section for the year 2018 in the provided Consolidated Statement of Cash Flows."
+financebench_id_04672,3M,3M_2018_10K,Assume that you are a public equities analyst. Answer the following question by primarily using information that is shown in the balance sheet: what is the year end FY2018 net PPNE for 3M? Answer in USD billions.,$8.70,"**Calculating 3M's Net PPNE for FY2018**
+
+Okay, so the user wants the ""net PPNE"" for 3M in fiscal year 2018, easy enough. We're dealing with their balance sheet, and thankfully, it's explicitly labeled: ""Property, plant and equipment net."" They've given us the numbers.
+
+Let's see... for 2018, the balance sheet lists ""$8,738 million"" for ""Property, plant and equipment net"". The request specifically wants the answer in USD *billions*. Right, so we need to convert millions to billions. Simple enough, divide by 1,000.
+
+So the calculation is straightforward: $8,738 million / 1,000 = $8.738 billion. There you go, the net PPNE for 3M in FY2018 is $8.738 billion. Done.
+The year-end FY2018 net Property, Plant, and Equipment (PPNE) for 3M is $8.738 billion.","**Calculating 3M's Net PP&E for FY2018**
+
+Okay, the request is straightforward. I need to calculate the ""net PPNE"" for 3M for FY2018, and the user wants the answer in USD billions. ""PPNE,"" considering the context, almost certainly refers to Property, Plant, and Equipment, and the balance sheet data confirms this as it explicitly states ""Property, plant and equipment net.""
+
+I just need to find the relevant figure. Scanning the balance sheet, I see the line item ""Property, plant and equipment net"" for the year 2018. The value listed is $8,738, but the unit is ""Dollars in millions"". So I need to convert this figure to billions to match the required output.
+
+To convert millions to billions, a simple division by 1,000 will do the trick. Therefore, the net PP&E figure in billions is… well, I'll provide the exact number shortly.
+The year-end FY2018 net Property, Plant, and Equipment (PPNE) for 3M is $8.738 billion."
+financebench_id_00499,3M,3M_2022_10K,Is 3M a capital-intensive business based on FY2022 data?,"No, the company is managing its CAPEX and Fixed Assets pretty efficiently, which is evident from below key metrics:
+CAPEX/Revenue Ratio: 5.1%
+Fixed assets/Total Assets: 20%
+Return on Assets= 12.4%","**Assessing 3M's Capital Intensity**
+
+Okay, so the user wants me to figure out if 3M is capital-intensive based on this FY2022 data. Hmmm... all I see here is ""Net sales"" for 2020, 2021, and 2022. That's a decent start, but it's really not enough.
+
+To actually make a call on capital intensity, I need to look at more than just revenue. I'd be looking for data like fixed assets, capital expenditures, or some other measure of the company's asset base relative to those net sales figures. Without that context, I'm flying blind. Just the sales data isn't going to cut it.
+
+So, the best thing to do is inform the user that I just don't have enough information to give them a reliable answer. I need a broader financial picture to make a proper assessment here.
+Based on the provided financial context, which only includes ""Net sales"" for 2022, it is not possible to determine if 3M is a capital-intensive business. To assess capital intensity, information such as capital expenditures, total assets, or property, plant, and equipment (PP&E) would be needed.","**Insufficient Data for Capital Intensity Assessment**
+
+Okay, here's what's running through my head. The user wants to know if 3M is capital-intensive, and they're looking for my assessment based on the FY2022 data. However, based on the provided data, I can't give a definitive answer. I'm seeing only ""Net Sales"" figures for 2022, 2021, and 2020. That's a good start, knowing the revenue trend is helpful, but it is not enough. To truly determine if a business is capital-intensive, I need to look at its asset base. Specifically, I'd want to see their fixed assets - property, plant, and equipment, primarily. I need to be able to compare those fixed assets to sales or revenue to gain an understanding. Without that critical piece of the puzzle, I can't determine the capital intensity. So, I have to state plainly that the information I have is insufficient to answer the question. I would need additional financial data.
+Based on the provided financial document, which only includes 3M Company's Net Sales for 2022 ($34,229 million), it is not possible to determine if 3M is a capital-intensive business. To assess capital intensity, information regarding capital expenditures, total assets, or property, plant, and equipment (PP&E) would be required."

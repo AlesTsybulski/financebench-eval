@@ -4,26 +4,28 @@ Benchmarking [FinanceBench](https://github.com/patronus-ai/financebench) against
 
 ## What This Does
 
-For each of the 150 questions in FinanceBench, the script:
+For each of the 150 questions in FinanceBench, the script runs four steps in a single pass:
 
-1. Creates a conversation with the plain model, uploads the source PDF, sends the question with evidence text, and records the answer
-2. Does the same thing with the Elen agent attached to the conversation
-3. Saves both answers to two CSV files after every question
+1. **Plain model** — creates a conversation, uploads the source PDF, sends the question with evidence text, records the answer
+2. **Elen model** — does the same with the Elen agent attached
+3. **LLM judge** — sends both answers to the same model and asks whether each is equivalent to the gold answer
+4. **Save** — writes both output files so progress is never lost if the script is interrupted
 
-Context is provided two ways at once: the relevant evidence text extracted from the document is included in the message body, and the full PDF is uploaded as an attached file. This gives the model both a focused excerpt and access to the complete source document.
+Context is provided two ways at once: the relevant evidence text from the dataset is included in the message body, and the full PDF is uploaded as an attached file.
 
 ## Project Structure
 
 ```
 financebench-eval/
 ├── benchmark.py         — main script
-├── .env                 — API credentials
-|── data/
+├── .env                 — API credentials (never committed to git)
+├── .env.example         — template showing required variables
+├── data/
 │   └── financebench_open_source.jsonl  — 150 questions with answers and evidence
 ├── pdfs/                — source PDF documents (not committed to git)
 └── results/
     ├── raw_results.csv       — full raw answers from both models
-    └── comparison_table.csv  — plain model vs Elen, final answers only
+    └── comparison_table.csv  — side-by-side comparison with judge verdicts
 ```
 
 ## Setup
@@ -87,9 +89,7 @@ If the script is interrupted, just run it again — it will resume from where it
 
 ## Output
 
-Two files are saved to `results/`:
-
-**`raw_results.csv`** — full answers from both models:
+**`results/raw_results.csv`** — full raw answers from both models:
 
 | Column | Description |
 |---|---|
@@ -101,16 +101,35 @@ Two files are saved to `results/`:
 | `plain_answer` | Full answer from plain model |
 | `elen_answer` | Full answer from model with Elen agent |
 
-**`comparison_table.csv`** — clean side-by-side comparison:
+**`results/comparison_table.csv`** — side-by-side comparison with judge verdicts:
 
 | Column | Description |
 |---|---|
-| `Plain model` | Final answer from plain model |
-| `Model + Elen` | Final answer from model with Elen agent |
+| `gold_answer` | Correct human-annotated answer |
+| `Plain model` | Answer from plain model |
+| `plain_is_correct` | Judge verdict for plain model (True/False) |
+| `plain_judge_response` | Raw judge reasoning for manual review |
+| `Model + Elen` | Answer from model with Elen agent |
+| `elen_is_correct` | Judge verdict for Elen model (True/False) |
+| `elen_judge_response` | Raw judge reasoning for manual review |
+
+At the end of the run, a score summary is printed:
+```
+==================================================
+RESULTS
+==================================================
+Questions evaluated : 150
+Plain model score   : 68/150 (45.3%)
+Elen  model score   : 95/150 (63.3%)
+```
+
+## How the LLM Judge Works
+
+After getting answers from both models, the script creates a temporary conversation and asks the same model to evaluate whether the answer is equivalent to the gold answer. Numbers are considered equivalent if they differ by less than 5%. The judge's raw response is saved to the comparison table so you can review any cases where the verdict seems wrong.
 
 ## Rate Limits
 
-Gemini enforces RPM (requests per minute) and TPM (tokens per minute) limits. The script waits 5 seconds between each question to stay within these limits. If you hit rate limit errors, increase `SLEEP_BETWEEN_REQUESTS` in `benchmark.py`.
+Gemini enforces RPM (requests per minute) and TPM (tokens per minute) limits. The script waits 5 seconds between model calls and 1 second between judge calls. If you hit rate limit errors, increase `SLEEP_BETWEEN_REQUESTS` in `benchmark.py`.
 
 ## How the API Works
 

@@ -121,27 +121,38 @@ def create_judge_conversation() -> str | None:
         return None
 
 
-def llm_judge(gold: str, answer: str, question: str) -> tuple[bool, str]:
+def _judge_call(gold: str, answer: str, question: str, short: bool = False) -> tuple[bool | None, str]:
+    """Single judge API call. Returns (None, raw_reply) if VERDICT not found (truncated)."""
     conv_id = create_judge_conversation()
     if not conv_id:
-        return False, "ERROR: could not create conversation"
+        return None, "ERROR: could not create conversation"
 
-    prompt = (
-        f"Classify whether the model answer matches the gold answer.\n\n"
-        f"Reply in this exact format — the very first line must be the verdict:\n"
-        f"VERDICT: YES\n"
-        f"or\n"
-        f"VERDICT: NO\n\n"
-        f"Do not write anything before the word VERDICT. You may explain after.\n\n"
-        f"Rules:\n"
-        f"- Numbers that differ by less than 5% are equivalent (rounding is acceptable).\n"
-        f"- A negative sign on a financial outflow amount is equivalent to the positive (e.g. -1577 and 1577 are the same).\n"
-        f"- Partial answers that omit key information from the gold are NOT equivalent.\n\n"
-        f"Question: {question}\n"
-        f"Gold: {gold}\n"
-        f"Model: {answer}\n\n"
-        f"VERDICT:"
-    )
+    if short:
+        # Minimal prompt for retry — no rules, no explanation, just the data.
+        # Reduces token usage so the model reaches VERDICT: before being cut off.
+        prompt = (
+            f"Does the model answer match the gold answer?\n"
+            f"Gold: {gold}\n"
+            f"Model: {answer}\n\n"
+            f"VERDICT:"
+        )
+    else:
+        prompt = (
+            f"Classify whether the model answer matches the gold answer.\n\n"
+            f"Reply in this exact format -- the very first line must be the verdict:\n"
+            f"VERDICT: YES\n"
+            f"or\n"
+            f"VERDICT: NO\n\n"
+            f"Do not write anything before the word VERDICT. You may explain after.\n\n"
+            f"Rules:\n"
+            f"- Numbers that differ by less than 5% are equivalent (rounding is acceptable).\n"
+            f"- A negative sign on a financial outflow amount is equivalent to the positive (e.g. -1577 and 1577 are the same).\n"
+            f"- Partial answers that omit key information from the gold are NOT equivalent.\n\n"
+            f"Question: {question}\n"
+            f"Gold: {gold}\n"
+            f"Model: {answer}\n\n"
+            f"VERDICT:"
+        )
 
     try:
         response = requests.post(
@@ -155,23 +166,36 @@ def llm_judge(gold: str, answer: str, question: str) -> tuple[bool, str]:
 
         match = re.search(r"VERDICT:\s*(YES|NO)", raw_reply.upper())
         if match:
-            verdict = match.group(1) == "YES"
+            return match.group(1) == "YES", raw_reply
         else:
-            verdict = False
-            print(f"  [WARN] llm_judge: could not parse VERDICT from: {raw_reply[:80]!r}")
-
-        return verdict, raw_reply
+            return None, raw_reply
     except Exception as e:
-        print(f"  [ERROR] llm_judge failed: {e}")
-        return False, f"ERROR: {e}"
+        print(f"  [ERROR] _judge_call failed: {e}")
+        return None, f"ERROR: {e}"
     finally:
         delete_conversation(conv_id)
+
+
+def llm_judge(gold: str, answer: str, question: str) -> tuple[bool, str]:
+    verdict, raw_reply = _judge_call(gold, answer, question, short=False)
+
+    if verdict is None:
+        print(f"  [WARN] judge 1 truncated, retrying with short prompt...")
+        verdict, raw_reply_2 = _judge_call(gold, answer, question, short=True)
+        raw_reply = f"[JUDGE 1 TRUNCATED]\n{raw_reply}\n\n[JUDGE 2 RETRY]\n{raw_reply_2}"
+
+        if verdict is None:
+            print(f"  [WARN] judge 2 also truncated, defaulting to False")
+            verdict = False
+
+    return verdict, raw_reply
 
 
 def is_correct(gold: str, answer: str, question: str) -> tuple[bool, str]:
     if pd.isnull(answer) or not answer:
         return False, "no answer"
     return llm_judge(gold, answer, question)
+
 
 
 

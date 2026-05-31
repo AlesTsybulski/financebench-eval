@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import time
 import argparse
@@ -20,7 +21,8 @@ HEADERS = {
 }
 
 SLEEP_BETWEEN_REQUESTS = 5
-RAW_RESULTS_PATH       = "results/raw_results.csv"
+RAW_RESULTS_PATH      = "results/raw_results.csv"
+COMPARISON_TABLE_PATH = "results/comparison_table.csv"
 
 
 def create_conversation(title: str, agent_id: str = None) -> str | None:
@@ -95,38 +97,69 @@ def delete_conversation(conversation_id: str):
         pass
 
 
+def create_judge_conversation() -> str | None:
+    body = {
+        "title": "judge",
+        "model": MODEL_ID,
+        "tools": {
+            "webSearch": False,
+            "codeInterpreter": False,
+            "imageGeneration": False,
+        }
+    }
+    try:
+        response = requests.post(
+            f"{BASE_URL}/conversations",
+            headers=HEADERS,
+            json=body,
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()["_id"]
+    except Exception as e:
+        print(f"  [ERROR] create_judge_conversation failed: {e}")
+        return None
+
+
 def llm_judge(gold: str, answer: str, question: str) -> tuple[bool, str]:
-    conv_id = create_conversation("judge")
+    conv_id = create_judge_conversation()
     if not conv_id:
         return False, "ERROR: could not create conversation"
 
     prompt = (
-        f"You are evaluating whether a model's answer is correct.\n\n"
-        f"The question asked: {question}\n"
-        f"Gold answer: {gold}\n"
-        f"Model answer: {answer}\n\n"
-        f"Are these answers equivalent in meaning?\n"
-        f"Important: if both answers contain numbers, consider them equivalent if they differ by less than 5% (rounding differences are acceptable).\n"
-        f"Reply with only YES or NO, nothing else."
+        f"Classify whether the model answer matches the gold answer.\n\n"
+        f"Reply in this exact format — the very first line must be the verdict:\n"
+        f"VERDICT: YES\n"
+        f"or\n"
+        f"VERDICT: NO\n\n"
+        f"Do not write anything before the word VERDICT. You may explain after.\n\n"
+        f"Rules:\n"
+        f"- Numbers that differ by less than 5% are equivalent (rounding is acceptable).\n"
+        f"- A negative sign on a financial outflow amount is equivalent to the positive (e.g. -1577 and 1577 are the same).\n"
+        f"- Partial answers that omit key information from the gold are NOT equivalent.\n\n"
+        f"Question: {question}\n"
+        f"Gold: {gold}\n"
+        f"Model: {answer}\n\n"
+        f"VERDICT:"
     )
 
-    body = {"message": prompt}
     try:
         response = requests.post(
             f"{BASE_URL}/conversations/{conv_id}/messages",
             headers=HEADERS,
-            json=body,
+            json={"message": prompt},
             timeout=60,
         )
         response.raise_for_status()
         raw_reply = response.json()["assistantMessage"]["content"].strip()
-        reply_upper = raw_reply.upper()
-        if "YES" in reply_upper.split():
-            verdict = True
-        elif "NO" in reply_upper.split():
-            verdict = False
+
+        match = re.search(r"VERDICT:\s*(YES|NO)", raw_reply.upper())
+        if match:
+            verdict = match.group(1) == "YES"
         else:
-            verdict = reply_upper.startswith("YES")
+            verdict = False
+            print(f"  [WARN] llm_judge: could not parse VERDICT from: {raw_reply[:80]!r}")
+
         return verdict, raw_reply
     except Exception as e:
         print(f"  [ERROR] llm_judge failed: {e}")
@@ -136,9 +169,11 @@ def llm_judge(gold: str, answer: str, question: str) -> tuple[bool, str]:
 
 
 def is_correct(gold: str, answer: str, question: str) -> tuple[bool, str]:
-    if not answer:
+    if pd.isnull(answer) or not answer:
         return False, "no answer"
     return llm_judge(gold, answer, question)
+
+
 
 
 def load_checkpoint() -> tuple[list, set]:
@@ -152,9 +187,8 @@ def load_checkpoint() -> tuple[list, set]:
 
 
 def run_benchmark(limit: int = None):
-    data_path = "data/financebench_open_source.jsonl"
     rows = []
-    with open(data_path, "r") as f:
+    with open("data/financebench_open_source.jsonl", "r") as f:
         for line in f:
             rows.append(json.loads(line.strip()))
 
@@ -168,12 +202,13 @@ def run_benchmark(limit: int = None):
     print(f"Already done    : {len(done_ids)}")
     print(f"Remaining       : {len(remaining)}")
     print(f"Model           : {MODEL_ID}")
-    print(f"Elen agent      : {ELEN_AGENT_ID}\n")
+    print(f"Elen agent      : {ELEN_AGENT_ID}")
+    print(f"\nThis pass collects raw answers only.")
+    print(f"Run with --judge afterwards to evaluate them.\n")
 
     if not remaining:
         print("All questions already processed!")
-
-    comparison_rows = []
+        return
 
     for i, row in enumerate(tqdm(remaining, desc="Questions")):
         question_id   = row["financebench_id"]
@@ -193,7 +228,6 @@ def run_benchmark(limit: int = None):
 
         print(f"\n[{i+1}/{len(remaining)}] {company} | {question[:60]}...")
 
-        # ── Step 1: plain model ───────────────────────────────────────────────
         plain_answer = None
         conv_id = create_conversation(f"plain_{question_id}")
         if conv_id:
@@ -203,7 +237,6 @@ def run_benchmark(limit: int = None):
 
         time.sleep(SLEEP_BETWEEN_REQUESTS)
 
-        # ── Step 2: elen model ────────────────────────────────────────────────
         elen_answer = None
         conv_id = create_conversation(f"elen_{question_id}", agent_id=ELEN_AGENT_ID)
         if conv_id:
@@ -213,13 +246,6 @@ def run_benchmark(limit: int = None):
 
         time.sleep(SLEEP_BETWEEN_REQUESTS)
 
-        # ── Step 3: judge ─────────────────────────────────────────────────────
-        p_correct, p_reply = is_correct(gold_answer, plain_answer, question)
-        time.sleep(1)
-        e_correct, e_reply = is_correct(gold_answer, elen_answer, question)
-        time.sleep(1)
-
-        # ── Step 4: save both files ───────────────────────────────────────────
         results.append({
             "financebench_id": question_id,
             "company":         company,
@@ -230,42 +256,88 @@ def run_benchmark(limit: int = None):
             "elen_answer":     elen_answer,
         })
 
-        comparison_rows.append({
-            "gold_answer":          gold_answer,
-            "Plain model":          plain_answer,
-            "plain_is_correct":     p_correct,
-            "plain_judge_response": p_reply,
-            "Model + Elen":         elen_answer,
-            "elen_is_correct":      e_correct,
-            "elen_judge_response":  e_reply,
-        })
-
         os.makedirs("results", exist_ok=True)
         pd.DataFrame(results).to_csv(RAW_RESULTS_PATH, index=False)
-        pd.DataFrame(comparison_rows).to_csv("results/comparison_table.csv", index=False)
 
+    print(f"\nCollection complete. {len(results)} rows in {RAW_RESULTS_PATH}")
+    print("Run with --judge to evaluate answers.")
+
+
+def run_judge(force: bool = False):
+    """Read raw_results.csv, run LLM judgment for each row, write comparison_table.csv."""
+    if not os.path.exists(RAW_RESULTS_PATH):
+        print("No raw_results.csv found. Run benchmark collection first.")
+        return
+
+    raw_df = pd.read_csv(RAW_RESULTS_PATH)
+    print(f"Loaded {len(raw_df)} rows from {RAW_RESULTS_PATH}")
+
+    done_ids: set[str] = set()
+    comparison_rows: list[dict] = []
+
+    if not force and os.path.exists(COMPARISON_TABLE_PATH) and os.path.getsize(COMPARISON_TABLE_PATH) > 0:
+        comp_df = pd.read_csv(COMPARISON_TABLE_PATH)
+        if "financebench_id" in comp_df.columns:
+            done_ids = set(comp_df["financebench_id"].astype(str).tolist())
+            comparison_rows = comp_df.to_dict("records")
+            print(f"Resuming: {len(done_ids)} rows already judged.")
+
+    pending = raw_df[~raw_df["financebench_id"].astype(str).isin(done_ids)]
+    print(f"Pending: {len(pending)} rows\n")
+
+    if pending.empty:
+        print("All rows already judged!")
+    else:
+        for i, row in enumerate(tqdm(pending.itertuples(index=False), total=len(pending), desc="Judging")):
+            question_id = str(row.financebench_id)
+            print(f"\n[{i+1}/{len(pending)}] {question_id}")
+
+            p_correct, p_reply = is_correct(row.gold_answer, row.plain_answer, row.question)
+            time.sleep(1)
+            e_correct, e_reply = is_correct(row.gold_answer, row.elen_answer, row.question)
+            time.sleep(1)
+
+            comparison_rows.append({
+                "financebench_id":      question_id,
+                "gold_answer":          row.gold_answer,
+                "Plain model":          row.plain_answer,
+                "plain_is_correct":     p_correct,
+                "plain_judge_response": p_reply,
+                "Model + Elen":         row.elen_answer,
+                "elen_is_correct":      e_correct,
+                "elen_judge_response":  e_reply,
+            })
+
+            os.makedirs("results", exist_ok=True)
+            pd.DataFrame(comparison_rows).to_csv(COMPARISON_TABLE_PATH, index=False)
+
+    total       = len(comparison_rows)
     plain_score = sum(r["plain_is_correct"] for r in comparison_rows)
     elen_score  = sum(r["elen_is_correct"]  for r in comparison_rows)
-    total       = len(results)
 
     print("\n" + "=" * 50)
     print("RESULTS")
     print("=" * 50)
     print(f"Questions evaluated : {total}")
-    print(f"Plain model score   : {plain_score}/{total} ({plain_score/total*100:.1f}%)")
-    print(f"Elen  model score   : {elen_score}/{total} ({elen_score/total*100:.1f}%)")
+    if total:
+        print(f"Plain model score   : {plain_score}/{total} ({plain_score/total*100:.1f}%)")
+        print(f"Elen  model score   : {elen_score}/{total} ({elen_score/total*100:.1f}%)")
     print(f"\nFiles saved:")
-    print(f"  results/raw_results.csv       — full raw answers")
-    print(f"  results/comparison_table.csv  — plain model vs elen")
+    print(f"  {RAW_RESULTS_PATH:<40} — full raw answers")
+    print(f"  {COMPARISON_TABLE_PATH:<40} — plain model vs elen")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run FinanceBench evaluation")
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Number of questions to evaluate (default: all 150)",
-    )
+    parser.add_argument("--limit", type=int, default=None,
+                        help="Number of questions to collect (default: all 150)")
+    parser.add_argument("--judge", action="store_true",
+                        help="Run LLM judgment pass on raw_results.csv comparison_table.csv")
+    parser.add_argument("--force-rejudge", action="store_true",
+                        help="Re-judge all rows, ignoring existing comparison_table.csv")
     args = parser.parse_args()
-    run_benchmark(limit=args.limit)
+
+    if args.judge:
+        run_judge(force=args.force_rejudge)
+    else:
+        run_benchmark(limit=args.limit)

@@ -4,14 +4,15 @@ Benchmarking [FinanceBench](https://github.com/patronus-ai/financebench) against
 
 ## What This Does
 
-For each of the 150 questions in FinanceBench, the script runs four steps in a single pass:
+The benchmark runs in two separate passes:
 
-1. **Plain model** — creates a conversation, uploads the source PDF, sends the question with evidence text, records the answer
-2. **Elen model** — does the same with the Elen agent attached
-3. **LLM judge** — sends both answers to the same model and asks whether each is equivalent to the gold answer
-4. **Save** — writes both output files so progress is never lost if the script is interrupted
+**Pass 1 — Collection** (`python benchmark.py`)
+For each question: creates a conversation, uploads the source PDF, sends the question with evidence text, records the answer for both plain model and Elen. Saves to `raw_results.csv` after every question.
 
-Context is provided two ways at once: the relevant evidence text from the dataset is included in the message body, and the full PDF is uploaded as an attached file.
+**Pass 2 — Judgment** (`python benchmark.py --judge`)
+Reads `raw_results.csv`, sends each answer pair to an LLM judge, saves verdicts to `comparison_table.csv` after every question.
+
+Both passes support resume — if interrupted, just run again and they pick up where they stopped.
 
 ## Project Structure
 
@@ -75,17 +76,21 @@ cp -r /path/to/financebench/pdfs pdfs/
 
 ## Usage
 
-Run on a small sample first to verify everything works:
+**Step 1 — collect answers** (test on 5 questions first):
 ```bash
 uv run python benchmark.py --limit 5
+uv run python benchmark.py          # full 150 questions
 ```
 
-Run the full benchmark:
+**Step 2 — run judgment:**
 ```bash
-uv run python benchmark.py
+uv run python benchmark.py --judge
 ```
 
-If the script is interrupted, just run it again — it will resume from where it stopped.
+**Re-judge everything from scratch:**
+```bash
+uv run python benchmark.py --judge --force-rejudge
+```
 
 ## Output
 
@@ -105,6 +110,7 @@ If the script is interrupted, just run it again — it will resume from where it
 
 | Column | Description |
 |---|---|
+| `financebench_id` | Question ID (used for resume) |
 | `gold_answer` | Correct human-annotated answer |
 | `Plain model` | Answer from plain model |
 | `plain_is_correct` | Judge verdict for plain model (True/False) |
@@ -113,7 +119,7 @@ If the script is interrupted, just run it again — it will resume from where it
 | `elen_is_correct` | Judge verdict for Elen model (True/False) |
 | `elen_judge_response` | Raw judge reasoning for manual review |
 
-At the end of the run, a score summary is printed:
+At the end of the judgment pass, a score summary is printed:
 ```
 ==================================================
 RESULTS
@@ -125,7 +131,7 @@ Elen  model score   : 95/150 (63.3%)
 
 ## How the LLM Judge Works
 
-After getting answers from both models, the script creates a temporary conversation and asks the same model to evaluate whether the answer is equivalent to the gold answer. Numbers are considered equivalent if they differ by less than 5%. The judge's raw response is saved to the comparison table so you can review any cases where the verdict seems wrong.
+The judge creates a temporary conversation and asks the model whether the answer is equivalent to the gold answer. Numbers differing by less than 5% are considered equivalent. YES/NO is extracted using regex so punctuation like `YES.` or `YES,` is handled correctly. The raw judge response is saved to the comparison table for manual review of any questionable verdicts.
 
 ## Rate Limits
 
